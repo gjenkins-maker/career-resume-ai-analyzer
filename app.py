@@ -1,10 +1,15 @@
 import streamlit as st
-import openai
 import PyPDF2
 import pandas as pd
 import plotly.express as px
+import re
 
 st.set_page_config(page_title="AI Resume Analyzer", layout="wide")
+
+def clean_resume_text(text):
+    text = re.sub(r'\n+', ' ', text)
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
 
 st.title("AI-Powered Career & Resume Analyzer")
 
@@ -25,10 +30,14 @@ if uploaded_file:
     resume_text = ""
 
     for page in pdf_reader.pages:
-        resume_text += page.extract_text()
+        page_text = page.extract_text()
+        if page_text:
+            resume_text += page_text + " "
+
+    resume_text = clean_resume_text(resume_text)
 
     st.subheader("Extracted Resume Text")
-    st.write(resume_text[:3000])
+    st.text_area("Resume Text Preview", resume_text[:3000], height=250)
 
     st.subheader("Career Insights")
 
