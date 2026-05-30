@@ -10,45 +10,136 @@ st.set_page_config(
     layout="wide"
 )
 
+# ---------- Helper Functions ----------
+
 def clean_resume_text(text):
     text = re.sub(r'\n+', ' ', text)
     text = re.sub(r'\s+', ' ', text)
     return text.strip()
 
+
 def calculate_resume_score(text):
     keywords = [
         "python", "sql", "data analysis", "data visualization", "dashboard",
         "streamlit", "plotly", "machine learning", "artificial intelligence",
-        "ai", "github", "excel", "business analytics", "project", "analytics"
+        "ai", "github", "excel", "business analytics", "project", "analytics",
+        "openai", "prompt engineering"
     ]
 
     text_lower = text.lower()
     matched = [word for word in keywords if word in text_lower]
-    score = min(100, int((len(matched) / len(keywords)) * 100) + 25)
+    missing = [word for word in keywords if word not in text_lower]
 
-    return score, matched, [word for word in keywords if word not in text_lower]
+    base_score = int((len(matched) / len(keywords)) * 75) + 15
+
+    # Cap the score so it feels more realistic
+    score = min(base_score, 94)
+
+    return score, matched, missing
+
 
 def career_match_scores(text):
     text_lower = text.lower()
 
     careers = {
-        "Business Analyst": ["business analytics", "excel", "strategy", "dashboard", "data analysis"],
-        "Data Analyst": ["python", "sql", "data visualization", "plotly", "analytics"],
-        "AI Operations Analyst": ["artificial intelligence", "ai", "openai", "machine learning", "prompt engineering"],
-        "Product Analyst": ["user", "dashboard", "insights", "business", "data"]
+        "Business Analyst": {
+            "keywords": ["business analytics", "excel", "strategy", "dashboard", "data analysis", "analytics"],
+            "base": 18
+        },
+        "Data Analyst": {
+            "keywords": ["python", "sql", "data visualization", "plotly", "analytics", "data analysis"],
+            "base": 15
+        },
+        "AI Operations Analyst": {
+            "keywords": ["artificial intelligence", "ai", "openai", "machine learning", "prompt engineering"],
+            "base": 12
+        },
+        "Product Analyst": {
+            "keywords": ["user", "dashboard", "insights", "business", "data", "project"],
+            "base": 10
+        }
     }
 
     results = []
 
-    for career, keywords in careers.items():
+    for career, data in careers.items():
+        keywords = data["keywords"]
         match_count = sum(1 for keyword in keywords if keyword in text_lower)
-        score = int((match_count / len(keywords)) * 100)
-        results.append({"Career Path": career, "Match Score": score})
 
-    return pd.DataFrame(results)
+        raw_score = int((match_count / len(keywords)) * 80) + data["base"]
+
+        # Make scores realistic and avoid everything being 100%
+        score = min(raw_score, 96)
+
+        results.append({
+            "Career Path": career,
+            "Match Score": score
+        })
+
+    df = pd.DataFrame(results)
+    df = df.sort_values(by="Match Score", ascending=False)
+
+    return df
+
+
+def generate_strengths(matched_keywords):
+    strengths = []
+
+    if "python" in matched_keywords:
+        strengths.append("Strong Python foundation shown through technical projects.")
+    if "streamlit" in matched_keywords or "dashboard" in matched_keywords:
+        strengths.append("Experience building interactive dashboards and web applications.")
+    if "data analysis" in matched_keywords or "analytics" in matched_keywords:
+        strengths.append("Clear alignment with analytics and data-driven decision-making roles.")
+    if "artificial intelligence" in matched_keywords or "ai" in matched_keywords or "openai" in matched_keywords:
+        strengths.append("Relevant exposure to AI applications and emerging technologies.")
+    if "github" in matched_keywords:
+        strengths.append("Project work is supported by GitHub, which strengthens portfolio credibility.")
+
+    if not strengths:
+        strengths.append("Resume shows potential, but more technical keywords would make it stronger.")
+
+    return strengths
+
+
+def generate_improvements(missing_keywords):
+    improvements = [
+        "Add more measurable outcomes, such as percentages, project impact, or performance improvements.",
+        "Tailor your resume keywords to each job description before applying.",
+        "Use strong action verbs such as developed, built, analyzed, evaluated, and deployed."
+    ]
+
+    if "sql" in missing_keywords:
+        improvements.append("Add SQL experience if relevant, since many analyst roles require it.")
+    if "excel" in missing_keywords:
+        improvements.append("Mention Excel if you have used it for business or analytics coursework.")
+    if "data visualization" in missing_keywords:
+        improvements.append("Highlight data visualization experience more clearly.")
+    if "machine learning" in missing_keywords:
+        improvements.append("Add machine learning coursework or project experience if applicable.")
+
+    return improvements
+
+
+def overall_recommendation(career_df, matched_keywords):
+    top_role = career_df.iloc[0]["Career Path"]
+    top_score = career_df.iloc[0]["Match Score"]
+
+    return (
+        f"This resume is strongest for **{top_role}** roles with a **{top_score}% match**. "
+        f"The profile shows a strong combination of analytics, technical project work, and business-focused problem solving. "
+        f"To make the resume even stronger, the candidate should continue adding measurable outcomes, clearer project impact, "
+        f"and role-specific keywords for each application."
+    )
+
+
+# ---------- App Layout ----------
 
 st.title("AI-Powered Career & Resume Analyzer")
-st.caption("Upload a resume to receive career insights, resume scoring, skill analysis, and personalized improvement suggestions.")
+st.caption(
+    "Upload a resume to receive resume scoring, career match insights, skill analysis, "
+    "and personalized improvement recommendations."
+)
 
 st.markdown("---")
 
@@ -67,8 +158,13 @@ if uploaded_file:
 
     score, matched_keywords, missing_keywords = calculate_resume_score(resume_text)
     career_df = career_match_scores(resume_text)
+    strengths = generate_strengths(matched_keywords)
+    improvements = generate_improvements(missing_keywords)
+    recommendation = overall_recommendation(career_df, matched_keywords)
 
     st.success("Resume uploaded and analyzed successfully!")
+
+    # ---------- Resume Overview ----------
 
     st.markdown("## Resume Overview")
 
@@ -81,14 +177,19 @@ if uploaded_file:
         st.metric("Keywords Found", len(matched_keywords))
 
     with col3:
-        st.metric("Career Matches", "4")
+        best_match = career_df.iloc[0]["Career Path"]
+        st.metric("Best Career Match", best_match)
 
     st.markdown("---")
 
-    st.markdown("## Extracted Resume Text")
-    st.text_area("Resume Text Preview", resume_text[:3000], height=220)
+    # ---------- Overall Recommendation ----------
+
+    st.markdown("## Overall Recommendation")
+    st.info(recommendation)
 
     st.markdown("---")
+
+    # ---------- Career Match Chart ----------
 
     st.markdown("## Career Match Analysis")
 
@@ -101,11 +202,17 @@ if uploaded_file:
     )
 
     fig_career.update_traces(texttemplate="%{text}%", textposition="outside")
-    fig_career.update_layout(yaxis_range=[0, 100])
+    fig_career.update_layout(
+        yaxis_range=[0, 100],
+        xaxis_title="Career Path",
+        yaxis_title="Match Score"
+    )
 
     st.plotly_chart(fig_career, use_container_width=True)
 
     st.markdown("---")
+
+    # ---------- Skill and Keyword Analysis ----------
 
     st.markdown("## Skill & Keyword Analysis")
 
@@ -113,66 +220,83 @@ if uploaded_file:
 
     with col4:
         st.subheader("Detected Strengths")
-        if matched_keywords:
-            for keyword in matched_keywords:
-                st.write(f"✅ {keyword.title()}")
-        else:
-            st.write("No strong keywords detected yet.")
+        for strength in strengths:
+            st.write(f"✅ {strength}")
 
     with col5:
-        st.subheader("Recommended Skills to Add")
-        if missing_keywords:
-            for keyword in missing_keywords[:8]:
-                st.write(f"➕ {keyword.title()}")
-        else:
-            st.write("Your resume includes most key skills.")
+        st.subheader("Recommended Improvements")
+        for improvement in improvements:
+            st.write(f"➕ {improvement}")
 
     st.markdown("---")
 
+    # ---------- Suggested Career Paths ----------
+
     st.markdown("## Suggested Career Paths")
 
-    top_careers = career_df.sort_values(by="Match Score", ascending=False)
-
-    for _, row in top_careers.iterrows():
+    for _, row in career_df.iterrows():
         st.write(f"**{row['Career Path']}** — {row['Match Score']}% match")
 
     st.markdown("---")
 
-    st.markdown("## Resume Improvement Recommendations")
+    # ---------- ATS Keyword Scan ----------
 
-    tips = [
-        "Add more measurable achievements, such as percentages, project outcomes, or impact.",
-        "Highlight technical tools clearly in the skills and project sections.",
-        "Include links to GitHub repositories and deployed applications when possible.",
-        "Use action verbs such as developed, built, analyzed, evaluated, and deployed.",
-        "Tailor your resume keywords to the specific job description before applying."
-    ]
+    st.markdown("## ATS Keyword Scan")
 
-    for tip in tips:
-        st.write(f"• {tip}")
+    col6, col7 = st.columns(2)
+
+    with col6:
+        st.subheader("Keywords Found")
+        if matched_keywords:
+            for keyword in matched_keywords:
+                st.write(f"✅ {keyword.title()}")
+        else:
+            st.write("No major keywords detected.")
+
+    with col7:
+        st.subheader("Suggested Keywords to Add")
+        if missing_keywords:
+            for keyword in missing_keywords[:8]:
+                st.write(f"➕ {keyword.title()}")
+        else:
+            st.write("Your resume includes most key keywords.")
 
     st.markdown("---")
+
+    # ---------- Resume Text Preview Lower on Page ----------
+
+    st.markdown("## Extracted Resume Text")
+    st.text_area("Resume Text Preview", resume_text[:3000], height=180)
+
+    st.markdown("---")
+
+    # ---------- Downloadable Report ----------
 
     report = f"""
 AI Career & Resume Analyzer Report
 
 Resume Score: {score}/100
 
+Best Career Match:
+{career_df.iloc[0]["Career Path"]} - {career_df.iloc[0]["Match Score"]}% match
+
+Career Match Scores:
+{career_df.to_string(index=False)}
+
 Detected Keywords:
 {", ".join(matched_keywords)}
 
-Recommended Skills to Add:
+Suggested Keywords to Add:
 {", ".join(missing_keywords[:10])}
 
-Top Career Matches:
-{career_df.to_string(index=False)}
+Top Strengths:
+{chr(10).join(["- " + strength for strength in strengths])}
 
-Resume Improvement Tips:
-- Add measurable achievements.
-- Highlight technical tools clearly.
-- Include GitHub and live project links.
-- Use stronger action verbs.
-- Tailor resume keywords to each job description.
+Recommended Improvements:
+{chr(10).join(["- " + improvement for improvement in improvements])}
+
+Overall Recommendation:
+{recommendation}
 """
 
     st.download_button(
